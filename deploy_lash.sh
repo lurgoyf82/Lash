@@ -225,7 +225,7 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${CELERY_ENV_FILE}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${CELERY_PYTHON_EXE} -m celery -A tasks worker --loglevel=info --concurrency=${CELERY_CONCURRENCY} -Q ${CELERY_QUEUES}
+ExecStart=${CELERY_PYTHON_EXE} -m celery -A tasks:celery_app worker --loglevel=info --concurrency=${CELERY_CONCURRENCY} -Q ${CELERY_QUEUES}
 Restart=on-failure
 
 [Install]
