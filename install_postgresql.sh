@@ -123,7 +123,7 @@ build_postgresql_record() {
         --arg id "$pgid" \
         --arg loc "$location" \
         --arg host "$host" \
-        --argjson port "$port" \
+        --arg port "$port" \
         --arg user "$username" \
         --arg password "$password" \
         --arg version "$version" \
@@ -133,7 +133,7 @@ build_postgresql_record() {
           id: $id,
           location: $loc,
           host: $host,
-          port: $port,
+          port: ($port | if . == "" then null else (tonumber) end),
           username: $user,
           password: $password,
           password_env: null,
