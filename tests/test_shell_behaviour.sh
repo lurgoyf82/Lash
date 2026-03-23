@@ -254,6 +254,28 @@ EOF
     rm -rf "$temp_dir"
 }
 
+
+run_runtime_entrypoint_files_test() {
+
+    python - <<'PYEOF' "${REPO_ROOT}"
+from pathlib import Path
+import sys
+
+repo_root = Path(sys.argv[1])
+main_text = (repo_root / "main.py").read_text()
+app_text = (repo_root / "app.py").read_text()
+tasks_text = (repo_root / "tasks.py").read_text()
+deploy_text = (repo_root / "deploy_lash.sh").read_text()
+
+assert 'app = FastAPI(title="LASH Gateway")' in main_text, 'FastAPI app bootstrap missing'
+assert '@app.get("/health"' in main_text, 'FastAPI health route missing'
+assert 'render_dashboard()' in app_text, 'Streamlit bootstrap missing'
+assert 'def create_celery_app()' in tasks_text, 'Celery factory missing'
+assert '@celery_app.task(name="lash.ping")' in tasks_text, 'Celery smoke task missing'
+assert '-A tasks:celery_app worker' in deploy_text, 'Celery systemd entrypoint should target celery_app'
+PYEOF
+}
+
 run_configure_local_postgresql_reuse_existing_record_test() {
     local temp_dir
     local fake_bin
@@ -385,6 +407,7 @@ run_collect_postgresql_credentials_output_test
 run_collect_postgresql_credentials_with_existing_password_test
 run_resolve_managed_python_runtime_test
 run_ensure_python_package_installed_test
+run_runtime_entrypoint_files_test
 run_configure_local_postgresql_reuse_existing_record_test
 run_configure_local_postgresql_failed_reuse_does_not_overwrite_test
 
