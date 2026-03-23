@@ -228,11 +228,9 @@ fi
 
 log_info "Installing SQLAlchemy into ${SQLALCHEMY_RUNTIME_PYTHON}..."
 "$SQLALCHEMY_RUNTIME_PYTHON" -m pip install --quiet "sqlalchemy"
-"$RESOLVED_SQLALCHEMY_PYTHON_EXE" -m pip install --quiet "sqlalchemy"
 
 # Detect installed version
 SA_VERSION=$("$SQLALCHEMY_RUNTIME_PYTHON" -c "import sqlalchemy; print(sqlalchemy.__version__)" 2>/dev/null)
-SA_VERSION=$("$RESOLVED_SQLALCHEMY_PYTHON_EXE" -c "import sqlalchemy; print(sqlalchemy.__version__)" 2>/dev/null)
 log_info "SQLAlchemy ${SA_VERSION} installed."
 
 # ---------------------------------------------------------------------------
