@@ -55,9 +55,17 @@ json_set_key "$UV_CONFIG" '.dependency_ready.fastapi' 'true'
 # ---------------------------------------------------------------------------
 # 3. Collect runtime settings
 # ---------------------------------------------------------------------------
-UV_HOST=$(ask_input "Uvicorn bind host" "0.0.0.0")
-UV_PORT=$(ask_input "Uvicorn port" "8000")
-UV_WORKERS=$(ask_input "Number of Uvicorn workers" "1")
+CURRENT_UV_HOST=$(json_get "$UV_CONFIG" '.host')
+CURRENT_UV_PORT=$(json_get "$UV_CONFIG" '.port')
+CURRENT_UV_WORKERS=$(json_get "$UV_CONFIG" '.workers')
+
+[[ "$CURRENT_UV_HOST" == "null" || -z "$CURRENT_UV_HOST" ]] && CURRENT_UV_HOST="0.0.0.0"
+[[ "$CURRENT_UV_PORT" == "null" || -z "$CURRENT_UV_PORT" ]] && CURRENT_UV_PORT="8000"
+[[ "$CURRENT_UV_WORKERS" == "null" || -z "$CURRENT_UV_WORKERS" ]] && CURRENT_UV_WORKERS="1"
+
+UV_HOST=$(ask_input "Uvicorn bind host" "${CURRENT_UV_HOST}")
+UV_PORT=$(ask_input "Uvicorn port" "${CURRENT_UV_PORT}")
+UV_WORKERS=$(ask_input "Number of Uvicorn workers" "${CURRENT_UV_WORKERS}")
 
 json_set_key "$UV_CONFIG" '.host'    "\"${UV_HOST}\""
 json_set_key "$UV_CONFIG" '.port'    "${UV_PORT}"

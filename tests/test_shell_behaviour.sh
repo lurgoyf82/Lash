@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+assert_eq() {
+    local expected="$1"
+    local actual="$2"
+    local message="$3"
+    if [[ "$expected" != "$actual" ]]; then
+        echo "ASSERTION FAILED: ${message}" >&2
+        echo "  expected: ${expected}" >&2
+        echo "  actual  : ${actual}" >&2
+        exit 1
+    fi
+}
+
+assert_file_contains() {
+    local file="$1"
+    local jq_filter="$2"
+    local expected="$3"
+    local actual
+    actual=$(jq -r "$jq_filter" "$file")
+    assert_eq "$expected" "$actual" "$file => $jq_filter"
+}
+
+run_inline_password_resolution_test() {
+    local temp_dir
+    temp_dir=$(mktemp -d)
+
+    cat > "${temp_dir}/postgresql.json" <<'JSON'
+{
+  "servers": {
+    "pg_inline": {
+      "password": "supersecret",
+      "password_env": null
+    },
+    "pg_env": {
+      "password": null,
+      "password_env": "PG_ENV_SECRET"
+    }
+  }
+}
+JSON
+
+    export PG_ENV_SECRET="from-env"
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/lib_installer.sh"
+
+    local inline_password
+    local env_password
+    inline_password=$(resolve_secret_value_from_json "${temp_dir}/postgresql.json" '.servers["pg_inline"]')
+    env_password=$(resolve_secret_value_from_json "${temp_dir}/postgresql.json" '.servers["pg_env"]')
+
+    assert_eq "supersecret" "$inline_password" "inline PostgreSQL password should win"
+    assert_eq "from-env" "$env_password" "environment fallback should still work"
+    rm -rf "$temp_dir"
+}
+
+run_change_port_flow_test() {
+    local temp_dir
+    temp_dir=$(mktemp -d)
+
+    cat > "${temp_dir}/uvicorn.json" <<'JSON'
+{}
+JSON
+
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/lib_installer.sh"
+
+    ask_choice() { echo "Use a different port"; }
+    ask_input() { echo "9191"; }
+    port_usage_report() { echo 'LISTEN 0 4096 *:9090'; }
+    is_port_free() {
+        case "$1" in
+            9090) return 1 ;;
+            9191) return 0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    local resolved
+    resolved=$(ensure_port_available "9090" "Prometheus" "${temp_dir}/uvicorn.json" '.port' | tail -n 1)
+    assert_eq "9191" "$resolved" "changed port should be returned"
+    assert_file_contains "${temp_dir}/uvicorn.json" '.port' '9191'
+    rm -rf "$temp_dir"
+}
+
+run_nuke_port_flow_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/lib_installer.sh"
+
+    local kill_called="false"
+    ask_choice() { echo "Nuke the process using port 9090"; }
+    port_usage_report() { echo 'LISTEN 0 4096 *:9090 users:(("prometheus",pid=2660,fd=6))'; }
+    is_port_free() {
+        if [[ "$kill_called" == "true" ]]; then
+            return 0
+        fi
+        return 1
+    }
+    kill_processes_on_port() {
+        local port="$1"
+        assert_eq "9090" "$port" "nuke path should target the conflicting port"
+        kill_called="true"
+        return 0
+    }
+
+    local resolved
+    resolved=$(ensure_port_available "9090" "Prometheus" | tail -n 1)
+    assert_eq "9090" "$resolved" "nuke path should keep the original port"
+}
+
+run_build_postgresql_record_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/install_postgresql.sh"
+
+    local record_file
+    record_file=$(mktemp)
+    build_postgresql_record "pg_123" "remote" "db.internal" "5433" "postgres" "hunter2" "" "" "" > "$record_file"
+
+    assert_file_contains "$record_file" '.id' 'pg_123'
+    assert_file_contains "$record_file" '.password' 'hunter2'
+    assert_file_contains "$record_file" '.password_env' 'null'
+    assert_file_contains "$record_file" '.binary_path' 'null'
+    rm -f "$record_file"
+}
+
+run_inline_password_resolution_test
+run_change_port_flow_test
+run_nuke_port_flow_test
+run_build_postgresql_record_test
+
+echo "All shell behaviour tests passed."
