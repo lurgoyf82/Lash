@@ -127,10 +127,8 @@ unset PGPASSWORD
 # Run Alembic migrations if alembic.ini exists in the project root
 if [[ -f "${LASH_INSTALLER_DIR}/alembic.ini" ]]; then
     log_info "Running Alembic migrations..."
-    PYTHON_ID=$(json_get "$SA_CONFIG" '.selected_python_id')
-    PYTHON_CONFIG="${LASH_CONFIG_DIR}/python.json"
-    PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${PYTHON_ID}\"].executable")
-    (cd "${LASH_INSTALLER_DIR}" && "$PYTHON_EXE" -m alembic upgrade head)
+    SA_PYTHON_EXE=$(resolve_component_python_executable "$SA_CONFIG")
+    (cd "${LASH_INSTALLER_DIR}" && "$SA_PYTHON_EXE" -m alembic upgrade head)
     log_info "Alembic migrations complete."
 else
     log_warn "alembic.ini not found. Skipping schema migration."
@@ -142,9 +140,10 @@ fi
 log_section "Step 4: Writing systemd Service Units"
 
 # Read runtime values from config files
-PYTHON_ID=$(json_get "${LASH_CONFIG_DIR}/uvicorn.json" '.selected_python_id')
-PYTHON_CONFIG="${LASH_CONFIG_DIR}/python.json"
-PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${PYTHON_ID}\"].executable")
+UVICORN_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/uvicorn.json")
+STREAMLIT_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/streamlit.json")
+CELERY_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/celery.json")
+LITELLM_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/litellm.json")
 INSTALL_DIR="${LASH_INSTALLER_DIR}"
 
 # Resolve broker URL for Celery
@@ -180,7 +179,7 @@ After=network.target lash-celery.service
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${PYTHON_EXE} -m uvicorn main:app --host ${UV_HOST} --port ${UV_PORT} --workers ${UV_WORKERS}
+ExecStart=${UVICORN_PYTHON_EXE} -m uvicorn main:app --host ${UV_HOST} --port ${UV_PORT} --workers ${UV_WORKERS}
 Restart=on-failure
 EnvironmentFile=-${INSTALL_DIR}/.env
 
@@ -197,7 +196,7 @@ After=network.target lash-api.service
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${PYTHON_EXE} -m streamlit run app.py --server.port ${STREAMLIT_PORT} --server.headless true
+ExecStart=${STREAMLIT_PYTHON_EXE} -m streamlit run app.py --server.port ${STREAMLIT_PORT} --server.headless true
 Restart=on-failure
 EnvironmentFile=-${INSTALL_DIR}/.env
 
@@ -226,7 +225,7 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${CELERY_ENV_FILE}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${PYTHON_EXE} -m celery -A tasks worker --loglevel=info --concurrency=${CELERY_CONCURRENCY} -Q ${CELERY_QUEUES}
+ExecStart=${CELERY_PYTHON_EXE} -m celery -A tasks worker --loglevel=info --concurrency=${CELERY_CONCURRENCY} -Q ${CELERY_QUEUES}
 Restart=on-failure
 
 [Install]
@@ -242,7 +241,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${PYTHON_EXE} -m litellm --port ${LITELLM_PORT}
+ExecStart=${LITELLM_PYTHON_EXE} -m litellm --port ${LITELLM_PORT}
 Restart=on-failure
 EnvironmentFile=-${INSTALL_DIR}/.env
 

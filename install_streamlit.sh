@@ -20,6 +20,7 @@ log_section "Streamlit Installer"
 init_json_file "$ST_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "port": 8501,
   "dependency_ready": {"python": false},
   "install_status": "pending",
@@ -58,6 +59,7 @@ CURRENT_ST_PORT=$(json_get "$ST_CONFIG" '.port')
 ST_PORT=$(ask_input "Streamlit port" "${CURRENT_ST_PORT}")
 
 json_set_key "$ST_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$ST_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$ST_CONFIG" '.port'                    "${ST_PORT}"
 json_set_key "$ST_CONFIG" '.dependency_ready.python' 'true'
 

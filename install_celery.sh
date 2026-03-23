@@ -22,6 +22,7 @@ log_section "Celery Installer"
 init_json_file "$CL_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "selected_redis_id": null,
   "concurrency": 4,
   "queues": ["default"],
@@ -54,6 +55,7 @@ fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
 json_set_key "$CL_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$CL_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$CL_CONFIG" '.dependency_ready.python' 'true'
 
 # ---------------------------------------------------------------------------
