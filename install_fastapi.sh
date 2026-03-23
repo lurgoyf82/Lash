@@ -20,6 +20,7 @@ log_section "FastAPI Installer"
 init_json_file "$FA_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "dependency_ready": {"python": false},
   "install_status": "pending",
   "version": null
@@ -49,6 +50,7 @@ fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
 json_set_key "$FA_CONFIG" '.selected_python_id'       "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$FA_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$FA_CONFIG" '.dependency_ready.python'  'true'
 
 # ---------------------------------------------------------------------------

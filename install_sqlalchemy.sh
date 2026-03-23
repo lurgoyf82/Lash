@@ -30,6 +30,7 @@ log_section "SQLAlchemy Installer"
 init_json_file "$SA_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "selected_postgresql_id": null,
   "selected_psycopg_id": null,
   "database_name": null,
@@ -81,8 +82,10 @@ fi
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
 log_info "Selected Python: ${SELECTED_PYTHON_EXE} (${SELECTED_PYTHON_ID})"
 
-# Write selected_python_id into consumer config (reference only)
+# Write selected_python_id into consumer config (reference only).
+# The effective runtime may later be updated after Psycopg resolves whether a venv is required.
 json_set_key "$SA_CONFIG" '.selected_python_id' "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$SA_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$SA_CONFIG" '.dependency_ready.python' 'true'
 
 # ===========================================================================
@@ -182,6 +185,10 @@ log_info "Selected Psycopg: ${RESOLVED_PSYCOPG_ID}"
 json_set_key "$SA_CONFIG" '.selected_psycopg_id'        "\"${RESOLVED_PSYCOPG_ID}\""
 json_set_key "$SA_CONFIG" '.dependency_ready.psycopg'   'true'
 
+RESOLVED_SQLALCHEMY_PYTHON_EXE="${RESOLVED_PSYCOPG_PYTHON:-$SELECTED_PYTHON_EXE}"
+json_set_key "$SA_CONFIG" '.resolved_python_executable' "\"${RESOLVED_SQLALCHEMY_PYTHON_EXE}\""
+log_info "Resolved SQLAlchemy runtime: ${RESOLVED_SQLALCHEMY_PYTHON_EXE}"
+
 # ===========================================================================
 # PHASE 4 — SQLAlchemy installation
 # ===========================================================================
@@ -198,11 +205,11 @@ if [[ "$python_ready" != "true" || "$pg_ready" != "true" || "$psycopg_ready" != 
     exit 1
 fi
 
-log_info "Installing SQLAlchemy into ${SELECTED_PYTHON_EXE}..."
-"$SELECTED_PYTHON_EXE" -m pip install --quiet "sqlalchemy"
+log_info "Installing SQLAlchemy into ${RESOLVED_SQLALCHEMY_PYTHON_EXE}..."
+"$RESOLVED_SQLALCHEMY_PYTHON_EXE" -m pip install --quiet "sqlalchemy"
 
 # Detect installed version
-SA_VERSION=$("$SELECTED_PYTHON_EXE" -c "import sqlalchemy; print(sqlalchemy.__version__)" 2>/dev/null)
+SA_VERSION=$("$RESOLVED_SQLALCHEMY_PYTHON_EXE" -c "import sqlalchemy; print(sqlalchemy.__version__)" 2>/dev/null)
 log_info "SQLAlchemy ${SA_VERSION} installed."
 
 # ---------------------------------------------------------------------------
@@ -216,7 +223,7 @@ json_set_key "$SA_CONFIG" '.install_status'   '"installed"'
 log_section "SQLAlchemy Install Complete"
 log_info "Installation ID : ${SA_ID}"
 log_info "Version         : ${SA_VERSION}"
-log_info "Python          : ${SELECTED_PYTHON_EXE} (${SELECTED_PYTHON_ID})"
+log_info "Python          : ${RESOLVED_SQLALCHEMY_PYTHON_EXE} (${SELECTED_PYTHON_ID})"
 log_info "PostgreSQL      : ${SELECTED_PG_ID}"
 log_info "Psycopg         : ${RESOLVED_PSYCOPG_ID}"
 log_info "Database        : ${DB_NAME} (schema: ${DB_SCHEMA})"

@@ -131,6 +131,36 @@ json_upsert_record() {
     mv "$tmp" "$file"
 }
 
+# resolve_component_python_executable <component_config> [python_config]
+# Returns the explicit resolved runtime for a component.
+# Falls back to config/python.json via selected_python_id for backward compatibility.
+resolve_component_python_executable() {
+    local component_config="$1"
+    local python_config="${2:-${LASH_CONFIG_DIR}/python.json}"
+    local resolved_python
+    local python_id
+
+    resolved_python=$(json_get "$component_config" '.resolved_python_executable')
+    if [[ "$resolved_python" != "null" && -n "$resolved_python" ]]; then
+        echo "$resolved_python"
+        return 0
+    fi
+
+    python_id=$(json_get "$component_config" '.selected_python_id')
+    if [[ "$python_id" == "null" || -z "$python_id" ]]; then
+        log_error "No resolved_python_executable or selected_python_id found in ${component_config}."
+        return 1
+    fi
+
+    resolved_python=$(json_get "$python_config" ".installations[\"${python_id}\"].executable")
+    if [[ "$resolved_python" == "null" || -z "$resolved_python" ]]; then
+        log_error "Could not resolve Python executable for ${python_id} from ${python_config}."
+        return 1
+    fi
+
+    echo "$resolved_python"
+}
+
 # ---------------------------------------------------------------------------
 # ID generation
 # ---------------------------------------------------------------------------
