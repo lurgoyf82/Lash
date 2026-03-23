@@ -10,6 +10,22 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 LASH_INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LASH_CONFIG_DIR="${LASH_INSTALLER_DIR}/config"
+LASH_DEBUG="${LASH_DEBUG:-1}"
+
+is_truthy() {
+    local value="${1:-}"
+    [[ "${value,,}" =~ ^(1|true|yes|on)$ ]]
+}
+
+enable_debug_mode() {
+    if ! is_truthy "$LASH_DEBUG"; then
+        return 0
+    fi
+
+    export PS4='+ [${BASH_SOURCE##*/}:${LINENO}] '
+    export BASH_XTRACEFD=2
+    set -x
+}
 
 # ---------------------------------------------------------------------------
 # Bootstrap: ensure jq is available (required for all JSON operations)
@@ -400,13 +416,17 @@ systemd_enable_start() {
 # Logging
 # ---------------------------------------------------------------------------
 
-log_info()    { echo "[INFO]  $*"; }
+log_info()    { echo "[INFO]  $*" >&2; }
 log_warn()    { echo "[WARN]  $*" >&2; }
 log_error()   { echo "[ERROR] $*" >&2; }
-log_section() { echo ""; echo "======================================"; echo "  $*"; echo "======================================"; }
+log_section() { echo "" >&2; echo "======================================" >&2; echo "  $*" >&2; echo "======================================" >&2; }
 
 # ---------------------------------------------------------------------------
 # Initialisation guard
 # ---------------------------------------------------------------------------
 ensure_jq
 ensure_config_dir
+enable_debug_mode
+if is_truthy "$LASH_DEBUG"; then
+    log_info "Installer debug mode enabled (LASH_DEBUG=${LASH_DEBUG}). Commands and logs will be printed to screen."
+fi
