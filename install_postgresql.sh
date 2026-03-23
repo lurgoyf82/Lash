@@ -40,25 +40,36 @@ test_postgresql_connection() {
     local username="$4"
     local password="$5"
     local output
+    local tried_ipv4_fallback="false"
 
-    if ! output=$(PGPASSWORD="$password" "$psql_bin" \
-        -h "$host" \
-        -p "$port" \
-        -U "$username" \
-        -d postgres \
-        -v ON_ERROR_STOP=1 \
-        -Atqc 'SELECT 1;' 2>&1); then
+    while true; do
+        if output=$(PGPASSWORD="$password" "$psql_bin" \
+            -h "$host" \
+            -p "$port" \
+            -U "$username" \
+            -d postgres \
+            -v ON_ERROR_STOP=1 \
+            -Atqc 'SELECT 1;' 2>&1); then
+            if [[ "$output" != "1" ]]; then
+                log_warn "Connection test returned unexpected output: ${output}"
+                return 1
+            fi
+
+            log_info "Connection test succeeded for ${username}@${host}:${port}."
+            return 0
+        fi
+
         log_warn "Connection test failed: ${output}"
-        return 1
-    fi
 
-    if [[ "$output" != "1" ]]; then
-        log_warn "Connection test returned unexpected output: ${output}"
-        return 1
-    fi
+        # If localhost resolves to ::1 and IPv6 auth/listen differs, retry on IPv4 loopback.
+        if [[ "$tried_ipv4_fallback" == "false" && "$host" == "localhost" ]]; then
+            tried_ipv4_fallback="true"
+            host="127.0.0.1"
+            continue
+        fi
 
-    log_info "Connection test succeeded for ${username}@${host}:${port}."
-    return 0
+        return 1
+    done
 }
 
 collect_postgresql_credentials() {
@@ -206,7 +217,7 @@ configure_remote_postgresql() {
     local record
 
     log_info "Collecting remote PostgreSQL connection details..."
-    host=$(ask_input "PostgreSQL host (IP or FQDN)" "localhost")
+    host=$(ask_input "PostgreSQL host (IP or FQDN)" "127.0.0.1")
     psql_exe=$(resolve_psql_client)
     IFS='|' read -r port pg_user pg_password <<< "$(collect_postgresql_credentials "$psql_exe" "$host" "5432" "postgres")"
     pgid=$(generate_id "pg")
