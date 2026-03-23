@@ -147,6 +147,7 @@ configure_local_postgresql() {
     local pg_user
     local pg_password
     local record
+    local default_port
 
     log_info "Scanning for local PostgreSQL installations..."
 
@@ -171,10 +172,12 @@ configure_local_postgresql() {
         sudo systemctl enable --now "$svc" || true
     fi
 
+    default_port="${LASH_POSTGRESQL_PORT:-5432}"
+
     for entry in "${found_local[@]}"; do
         IFS='|' read -r psql_exe ver svc <<< "$entry"
-        host="localhost"
-        port=5432
+        host="127.0.0.1"
+        port="$default_port"
 
         existing_id=$(json_get "$PG_CONFIG" \
             ".servers | to_entries[] | select(.value.binary_path == \"$psql_exe\") | .key" | head -1)
