@@ -9,6 +9,7 @@
 #   installations.<psycopg_id>.package_name   (psycopg2-binary | psycopg | psycopg[binary])
 #   installations.<psycopg_id>.version
 #   installations.<psycopg_id>.install_status
+#   installations.<psycopg_id>.venv_dir
 #
 # This script expects SELECTED_PYTHON_ID and SELECTED_PYTHON_EXE to be set in
 # the calling environment, or it will read them from config/python.json interactively.
@@ -55,11 +56,30 @@ SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYT
 log_info "Using Python: ${SELECTED_PYTHON_EXE} (${SELECTED_PYTHON_ID})"
 
 # ---------------------------------------------------------------------------
-# 3. Detect Psycopg inside the selected Python environment
+# 3. Hybrid install strategy:
+#    - Prefer system/selected interpreter when writable
+#    - Fallback to venv if PEP 668 blocks pip
 # ---------------------------------------------------------------------------
+PSYCOPG_VENV_DIR="${LASH_INSTALLER_DIR}/.venv/psycopg/${SELECTED_PYTHON_ID}"
+PSYCOPG_VENV_PY="${PSYCOPG_VENV_DIR}/bin/python"
+
+ensure_venv() {
+    local python_exe="$1"
+    local venv_dir="$2"
+
+    if [[ -x "${venv_dir}/bin/python" ]]; then
+        return 0
+    fi
+
+    log_info "Creating venv for Psycopg at: ${venv_dir}"
+    mkdir -p "$(dirname "${venv_dir}")"
+    "$python_exe" -m venv "$venv_dir"
+
+    "${venv_dir}/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
+}
+
 detect_psycopg() {
     local python_exe="$1"
-    # Try psycopg (v3) first, then psycopg2.
     for pkg in psycopg psycopg2; do
         ver=$("$python_exe" -c "import ${pkg}; print(${pkg}.__version__)" 2>/dev/null) && {
             echo "${pkg}|${ver}"
@@ -69,19 +89,82 @@ detect_psycopg() {
     return 1
 }
 
-existing_pkg_info=$(detect_psycopg "$SELECTED_PYTHON_EXE" || true)
+pip_install_psycopg() {
+    local python_exe="$1"
+    local tmp
+    tmp="$(mktemp)"
+    set +e
+    "$python_exe" -m pip install --quiet "psycopg[binary]" >"$tmp" 2>&1
+    local rc=$?
+    set -e
+    if (( rc != 0 )); then
+        cat "$tmp" >&2
+    fi
+    rm -f "$tmp"
+    return $rc
+}
 
+is_pep668_error() {
+    local text="$1"
+    grep -qiE 'externally-managed-environment|PEP 668|This environment is externally managed' <<<"$text"
+}
+
+resolved_python=""
+resolved_venv_dir=""
+
+# 3.1 Detect in selected interpreter first (no changes)
+existing_pkg_info=$(detect_psycopg "$SELECTED_PYTHON_EXE" || true)
 if [[ -n "$existing_pkg_info" ]]; then
     pkg_name="${existing_pkg_info%%|*}"
     pkg_ver="${existing_pkg_info##*|}"
-    log_info "Psycopg already installed: ${pkg_name} ${pkg_ver}"
+    resolved_python="$SELECTED_PYTHON_EXE"
+    log_info "Psycopg already installed in selected Python: ${pkg_name} ${pkg_ver}"
 else
-    log_info "Psycopg not found. Installing psycopg[binary] (v3)..."
-    "$SELECTED_PYTHON_EXE" -m pip install --quiet "psycopg[binary]"
-    existing_pkg_info=$(detect_psycopg "$SELECTED_PYTHON_EXE")
-    pkg_name="${existing_pkg_info%%|*}"
-    pkg_ver="${existing_pkg_info##*|}"
-    log_info "Installed: ${pkg_name} ${pkg_ver}"
+    # 3.2 Try install in selected interpreter
+    log_info "Psycopg not found. Trying to install into selected Python..."
+    install_out="$(mktemp)"
+    set +e
+    "$SELECTED_PYTHON_EXE" -m pip install --quiet "psycopg[binary]" >"$install_out" 2>&1
+    rc=$?
+    set -e
+
+    if (( rc == 0 )); then
+        rm -f "$install_out"
+        existing_pkg_info=$(detect_psycopg "$SELECTED_PYTHON_EXE")
+        pkg_name="${existing_pkg_info%%|*}"
+        pkg_ver="${existing_pkg_info##*|}"
+        resolved_python="$SELECTED_PYTHON_EXE"
+        log_info "Installed in selected Python: ${pkg_name} ${pkg_ver}"
+    else
+        err_text="$(cat "$install_out")"
+        rm -f "$install_out"
+
+        if is_pep668_error "$err_text"; then
+            log_warn "Selected Python is externally managed (PEP 668). Falling back to venv..."
+            ensure_venv "$SELECTED_PYTHON_EXE" "$PSYCOPG_VENV_DIR"
+
+            existing_pkg_info=$(detect_psycopg "$PSYCOPG_VENV_PY" || true)
+            if [[ -n "$existing_pkg_info" ]]; then
+                pkg_name="${existing_pkg_info%%|*}"
+                pkg_ver="${existing_pkg_info##*|}"
+                resolved_python="$PSYCOPG_VENV_PY"
+                resolved_venv_dir="$PSYCOPG_VENV_DIR"
+                log_info "Psycopg already installed in venv: ${pkg_name} ${pkg_ver}"
+            else
+                log_info "Installing psycopg[binary] (v3) into venv..."
+                "$PSYCOPG_VENV_PY" -m pip install --quiet "psycopg[binary]"
+                existing_pkg_info=$(detect_psycopg "$PSYCOPG_VENV_PY")
+                pkg_name="${existing_pkg_info%%|*}"
+                pkg_ver="${existing_pkg_info##*|}"
+                resolved_python="$PSYCOPG_VENV_PY"
+                resolved_venv_dir="$PSYCOPG_VENV_DIR"
+                log_info "Installed in venv: ${pkg_name} ${pkg_ver}"
+            fi
+        else
+            log_error "pip install failed in selected Python (non-PEP668). See error above."
+            exit 1
+        fi
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -103,10 +186,14 @@ record=$(jq -n \
     --arg pyid  "$SELECTED_PYTHON_ID" \
     --arg pkg   "$pkg_name" \
     --arg ver   "$pkg_ver" \
+    --arg venv  "$resolved_venv_dir" \
     '{id:$id, python_id:$pyid, package_name:$pkg,
-      version:$ver, install_status:"installed"}')
+      version:$ver, install_status:"installed", venv_dir:$venv}')
+
 json_upsert_record "$PSYCOPG_CONFIG" ".installations" "$psycopg_id" "$record"
 
 # Export for the calling script
 export RESOLVED_PSYCOPG_ID="$psycopg_id"
+export RESOLVED_PSYCOPG_VENV_DIR="$resolved_venv_dir"
+export RESOLVED_PSYCOPG_PYTHON="$resolved_python"
 log_info "Psycopg installer complete. Resolved ID: ${psycopg_id}"
