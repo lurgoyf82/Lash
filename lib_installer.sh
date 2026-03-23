@@ -131,6 +131,53 @@ json_upsert_record() {
     mv "$tmp" "$file"
 }
 
+ensure_python_venv() {
+    local python_exe="$1"
+    local venv_dir="$2"
+
+    if [[ -x "${venv_dir}/bin/python" ]]; then
+        return 0
+    fi
+
+    log_info "Creating Python venv at: ${venv_dir}"
+    mkdir -p "$(dirname "${venv_dir}")"
+    "$python_exe" -m venv "$venv_dir"
+    "${venv_dir}/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
+}
+
+resolve_managed_python_runtime() {
+    local python_exe="$1"
+    local venv_dir="$2"
+
+    ensure_python_venv "$python_exe" "$venv_dir"
+    echo "${venv_dir}/bin/python"
+}
+
+detect_python_module_version() {
+    local python_exe="$1"
+    local module_name="$2"
+    local version_expr="${3:-print(${module_name}.__version__)}"
+
+    "$python_exe" -c "import ${module_name}; ${version_expr}" 2>/dev/null
+}
+
+ensure_python_package_installed() {
+    local python_exe="$1"
+    local package_spec="$2"
+    local module_name="$3"
+    local version_expr="${4:-print(${module_name}.__version__)}"
+    local version
+
+    version=$(detect_python_module_version "$python_exe" "$module_name" "$version_expr" || true)
+    if [[ -n "$version" ]]; then
+        echo "$version"
+        return 0
+    fi
+
+    "$python_exe" -m pip install --quiet "$package_spec"
+    detect_python_module_version "$python_exe" "$module_name" "$version_expr"
+}
+
 # resolve_component_python_executable <component_config> [python_config]
 # Returns the explicit resolved runtime for a component.
 # Falls back to config/python.json via selected_python_id for backward compatibility.

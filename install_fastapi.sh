@@ -49,17 +49,18 @@ else
 fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
-json_set_key "$FA_CONFIG" '.selected_python_id'       "\"${SELECTED_PYTHON_ID}\""
-json_set_key "$FA_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
-json_set_key "$FA_CONFIG" '.dependency_ready.python'  'true'
+APP_VENV_DIR="${LASH_INSTALLER_DIR}/.venv/apps/${SELECTED_PYTHON_ID}"
+APP_PYTHON_EXE=$(resolve_managed_python_runtime "$SELECTED_PYTHON_EXE" "$APP_VENV_DIR")
+json_set_key "$FA_CONFIG" '.selected_python_id'         "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$FA_CONFIG" '.resolved_python_executable' "\"${APP_PYTHON_EXE}\""
+json_set_key "$FA_CONFIG" '.dependency_ready.python'    'true'
 
 # ---------------------------------------------------------------------------
 # 3. Install FastAPI
 # ---------------------------------------------------------------------------
-log_info "Installing FastAPI into ${SELECTED_PYTHON_EXE}..."
-"$SELECTED_PYTHON_EXE" -m pip install --quiet "fastapi"
+log_info "Installing FastAPI into ${APP_PYTHON_EXE}..."
+FA_VERSION=$(ensure_python_package_installed "$APP_PYTHON_EXE" "fastapi" "fastapi")
 
-FA_VERSION=$("$SELECTED_PYTHON_EXE" -c "import fastapi; print(fastapi.__version__)" 2>/dev/null)
 log_info "FastAPI ${FA_VERSION} installed."
 
 FA_ID=$(generate_id "fastapi")
@@ -69,4 +70,5 @@ json_set_key "$FA_CONFIG" '.install_status'   '"installed"'
 
 export RESOLVED_FASTAPI_ID="$FA_ID"
 export RESOLVED_FASTAPI_PYTHON_ID="$SELECTED_PYTHON_ID"
+export RESOLVED_FASTAPI_PYTHON="$APP_PYTHON_EXE"
 log_info "FastAPI installer complete. ID: ${FA_ID}"

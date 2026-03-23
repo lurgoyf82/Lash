@@ -50,6 +50,8 @@ else
 fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
+APP_VENV_DIR="${LASH_INSTALLER_DIR}/.venv/apps/${SELECTED_PYTHON_ID}"
+APP_PYTHON_EXE=$(resolve_managed_python_runtime "$SELECTED_PYTHON_EXE" "$APP_VENV_DIR")
 
 # ---------------------------------------------------------------------------
 # 3. Collect LiteLLM settings
@@ -58,18 +60,17 @@ CURRENT_LL_PORT=$(json_get "$LL_CONFIG" '.port')
 [[ "$CURRENT_LL_PORT" == "null" || -z "$CURRENT_LL_PORT" ]] && CURRENT_LL_PORT="4000"
 LL_PORT=$(ask_input "LiteLLM proxy port" "${CURRENT_LL_PORT}")
 
-json_set_key "$LL_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
-json_set_key "$LL_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
-json_set_key "$LL_CONFIG" '.port'                    "${LL_PORT}"
-json_set_key "$LL_CONFIG" '.dependency_ready.python' 'true'
+json_set_key "$LL_CONFIG" '.selected_python_id'         "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$LL_CONFIG" '.resolved_python_executable' "\"${APP_PYTHON_EXE}\""
+json_set_key "$LL_CONFIG" '.port'                       "${LL_PORT}"
+json_set_key "$LL_CONFIG" '.dependency_ready.python'    'true'
 
 # ---------------------------------------------------------------------------
 # 4. Install LiteLLM
 # ---------------------------------------------------------------------------
-log_info "Installing LiteLLM into ${SELECTED_PYTHON_EXE}..."
-"$SELECTED_PYTHON_EXE" -m pip install --quiet "litellm[proxy]"
+log_info "Installing LiteLLM into ${APP_PYTHON_EXE}..."
+LL_VERSION=$(ensure_python_package_installed "$APP_PYTHON_EXE" "litellm[proxy]" "litellm" 'print(getattr(litellm, "__version__", "unknown"))')
 
-LL_VERSION=$("$SELECTED_PYTHON_EXE" -c "import litellm; print(litellm.__version__)" 2>/dev/null || echo "unknown")
 log_info "LiteLLM ${LL_VERSION} installed."
 
 LL_ID=$(generate_id "litellm")

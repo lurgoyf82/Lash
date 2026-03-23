@@ -50,6 +50,8 @@ else
 fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
+APP_VENV_DIR="${LASH_INSTALLER_DIR}/.venv/apps/${SELECTED_PYTHON_ID}"
+APP_PYTHON_EXE=$(resolve_managed_python_runtime "$SELECTED_PYTHON_EXE" "$APP_VENV_DIR")
 
 # ---------------------------------------------------------------------------
 # 3. Collect runtime settings
@@ -58,18 +60,17 @@ CURRENT_ST_PORT=$(json_get "$ST_CONFIG" '.port')
 [[ "$CURRENT_ST_PORT" == "null" || -z "$CURRENT_ST_PORT" ]] && CURRENT_ST_PORT="8501"
 ST_PORT=$(ask_input "Streamlit port" "${CURRENT_ST_PORT}")
 
-json_set_key "$ST_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
-json_set_key "$ST_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
-json_set_key "$ST_CONFIG" '.port'                    "${ST_PORT}"
-json_set_key "$ST_CONFIG" '.dependency_ready.python' 'true'
+json_set_key "$ST_CONFIG" '.selected_python_id'         "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$ST_CONFIG" '.resolved_python_executable' "\"${APP_PYTHON_EXE}\""
+json_set_key "$ST_CONFIG" '.port'                       "${ST_PORT}"
+json_set_key "$ST_CONFIG" '.dependency_ready.python'    'true'
 
 # ---------------------------------------------------------------------------
 # 4. Install Streamlit
 # ---------------------------------------------------------------------------
-log_info "Installing Streamlit into ${SELECTED_PYTHON_EXE}..."
-"$SELECTED_PYTHON_EXE" -m pip install --quiet streamlit
+log_info "Installing Streamlit into ${APP_PYTHON_EXE}..."
+ST_VERSION=$(ensure_python_package_installed "$APP_PYTHON_EXE" "streamlit" "streamlit")
 
-ST_VERSION=$("$SELECTED_PYTHON_EXE" -c "import streamlit; print(streamlit.__version__)" 2>/dev/null)
 log_info "Streamlit ${ST_VERSION} installed."
 
 ST_ID=$(generate_id "streamlit")

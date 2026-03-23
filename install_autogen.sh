@@ -52,9 +52,11 @@ else
 fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
-json_set_key "$AG_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
-json_set_key "$AG_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
-json_set_key "$AG_CONFIG" '.dependency_ready.python' 'true'
+APP_VENV_DIR="${LASH_INSTALLER_DIR}/.venv/apps/${SELECTED_PYTHON_ID}"
+APP_PYTHON_EXE=$(resolve_managed_python_runtime "$SELECTED_PYTHON_EXE" "$APP_VENV_DIR")
+json_set_key "$AG_CONFIG" '.selected_python_id'         "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$AG_CONFIG" '.resolved_python_executable' "\"${APP_PYTHON_EXE}\""
+json_set_key "$AG_CONFIG" '.dependency_ready.python'    'true'
 
 # ---------------------------------------------------------------------------
 # 3. LiteLLM dependency (model access layer)
@@ -82,11 +84,10 @@ json_set_key "$AG_CONFIG" '.dependency_ready.litellm'  'true'
 # ---------------------------------------------------------------------------
 # 4. Install AutoGen (ag2 package)
 # ---------------------------------------------------------------------------
-log_info "Installing AutoGen (ag2) into ${SELECTED_PYTHON_EXE}..."
+log_info "Installing AutoGen (ag2) into ${APP_PYTHON_EXE}..."
 # ag2 is the community-maintained fork of AutoGen
-"$SELECTED_PYTHON_EXE" -m pip install --quiet "ag2[openai]"
+AG_VERSION=$(ensure_python_package_installed "$APP_PYTHON_EXE" "ag2[openai]" "autogen" 'print(getattr(autogen, "__version__", "unknown"))')
 
-AG_VERSION=$("$SELECTED_PYTHON_EXE" -c "import autogen; print(autogen.__version__)" 2>/dev/null || echo "unknown")
 log_info "AutoGen ${AG_VERSION} installed."
 
 AG_ID=$(generate_id "autogen")
