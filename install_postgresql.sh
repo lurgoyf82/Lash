@@ -77,9 +77,11 @@ collect_postgresql_credentials() {
     local host="$2"
     local default_port="$3"
     local default_user="$4"
+    local default_password="${5:-}"
     local resolved_port
     local resolved_user
     local resolved_password
+    local password_prompt
 
     while true; do
         resolved_port=$(ask_input "PostgreSQL port" "$default_port")
@@ -89,7 +91,17 @@ collect_postgresql_credentials() {
         fi
 
         resolved_user=$(ask_input "PostgreSQL admin username" "$default_user")
-        resolved_password=$(ask_secret "PostgreSQL password (will be stored in config/postgresql.json)")
+
+        if [[ -n "$default_password" ]]; then
+            password_prompt="PostgreSQL password (leave blank to keep the existing stored value)"
+            resolved_password=$(ask_secret "$password_prompt")
+            if [[ -z "$resolved_password" ]]; then
+                resolved_password="$default_password"
+            fi
+        else
+            password_prompt="PostgreSQL password (will be stored in config/postgresql.json)"
+            resolved_password=$(ask_secret "$password_prompt")
+        fi
 
         if [[ -z "$resolved_password" ]]; then
             log_warn "Password cannot be empty."
@@ -108,6 +120,27 @@ collect_postgresql_credentials() {
     done
 }
 
+read_existing_postgresql_record() {
+    local pgid="$1"
+
+    jq -r --arg id "$pgid" '
+        .servers[$id] // {} | [
+            (.host // ""),
+            (.port // "" | tostring),
+            (.username // ""),
+            (.password // ""),
+            (.available // false | tostring)
+        ] | @tsv
+    ' "$PG_CONFIG"
+}
+
+prompt_existing_postgresql_action() {
+    ask_choice \
+        "Existing PostgreSQL configuration found for this binary path. What do you want to do?" \
+        "Use the existing configuration" \
+        "Modify it and re-verify the connection"
+}
+
 build_postgresql_record() {
     local pgid="$1"
     local location="$2"
@@ -118,6 +151,7 @@ build_postgresql_record() {
     local version="$7"
     local binary_path="$8"
     local service_name="$9"
+    local available="${10:-false}"
 
     jq -n \
         --arg id "$pgid" \
@@ -129,6 +163,7 @@ build_postgresql_record() {
         --arg version "$version" \
         --arg binary_path "$binary_path" \
         --arg service_name "$service_name" \
+        --argjson available "$available" \
         '{
           id: $id,
           location: $loc,
@@ -140,7 +175,7 @@ build_postgresql_record() {
           version: ($version | if . == "" then null else . end),
           binary_path: ($binary_path | if . == "" then null else . end),
           service_name: ($service_name | if . == "" then null else . end),
-          available: true
+          available: $available
         }'
 }
 
@@ -159,6 +194,12 @@ configure_local_postgresql() {
     local pg_password
     local record
     local default_port
+    local existing_host
+    local existing_port
+    local existing_user
+    local existing_password
+    local existing_available
+    local action
 
     log_info "Scanning for local PostgreSQL installations..."
 
@@ -196,13 +237,43 @@ configure_local_postgresql() {
         if [[ -n "$existing_id" && "$existing_id" != "null" ]]; then
             pgid="$existing_id"
             log_info "Updating existing PostgreSQL record $pgid"
+
+            IFS=$'\t' read -r existing_host existing_port existing_user existing_password existing_available <<< "$(read_existing_postgresql_record "$pgid")"
+            host="${existing_host:-$host}"
+            port="${existing_port:-$port}"
+
+            log_info "Existing record status: host=${host} port=${port} user=${existing_user:-postgres} available=${existing_available}"
+            action=$(prompt_existing_postgresql_action)
+
+            if [[ "$action" == "Use the existing configuration" ]]; then
+                if [[ -n "$existing_host" && -n "$existing_port" && -n "$existing_user" && -n "$existing_password" ]] \
+                    && test_postgresql_connection "$psql_exe" "$existing_host" "$existing_port" "$existing_user" "$existing_password"; then
+                    pg_port="$existing_port"
+                    pg_user="$existing_user"
+                    pg_password="$existing_password"
+                    host="$existing_host"
+                else
+                    log_warn "The existing PostgreSQL configuration could not be verified. The stored values will remain unchanged until a new verification succeeds."
+                    if ask_yes_no "Do you want to modify the existing configuration and re-verify it now?"; then
+                        action="Modify it and re-verify the connection"
+                    else
+                        log_error "Aborting without overwriting the existing PostgreSQL record."
+                        exit 1
+                    fi
+                fi
+            fi
+
+            if [[ "$action" == "Modify it and re-verify the connection" ]]; then
+                host=$(ask_input "PostgreSQL host" "$host")
+                IFS='|' read -r pg_port pg_user pg_password <<< "$(collect_postgresql_credentials "$psql_exe" "$host" "$port" "${existing_user:-postgres}" "$existing_password")"
+            fi
         else
             pgid=$(generate_id "pg")
             log_info "Recording new local PostgreSQL: $pgid ($psql_exe, $ver)"
+            IFS='|' read -r pg_port pg_user pg_password <<< "$(collect_postgresql_credentials "$psql_exe" "$host" "$port" "postgres")"
         fi
 
-        IFS='|' read -r pg_port pg_user pg_password <<< "$(collect_postgresql_credentials "$psql_exe" "$host" "$port" "postgres")"
-        record=$(build_postgresql_record "$pgid" "local" "$host" "$pg_port" "$pg_user" "$pg_password" "$ver" "$psql_exe" "${svc:-postgresql}")
+        record=$(build_postgresql_record "$pgid" "local" "$host" "$pg_port" "$pg_user" "$pg_password" "$ver" "$psql_exe" "${svc:-postgresql}" true)
         json_upsert_record "$PG_CONFIG" ".servers" "$pgid" "$record"
     done
 }
@@ -224,7 +295,7 @@ configure_remote_postgresql() {
     pg_pass_env="PG_PASSWORD_${pgid^^}"
     log_info "Set environment variable ${pg_pass_env} to the PostgreSQL password before starting LASH."
 
-    record=$(build_postgresql_record "$pgid" "remote" "$host" "$port" "$pg_user" "$pg_password" "" "" "")
+    record=$(build_postgresql_record "$pgid" "remote" "$host" "$port" "$pg_user" "$pg_password" "" "" "" true)
     json_upsert_record "$PG_CONFIG" ".servers" "$pgid" "$record"
     log_info "Remote PostgreSQL server recorded as $pgid."
 }

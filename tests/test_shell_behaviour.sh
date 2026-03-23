@@ -115,15 +115,21 @@ run_build_postgresql_record_test() {
     # shellcheck disable=SC1091
     source "${REPO_ROOT}/install_postgresql.sh"
 
-    local record_file
-    record_file=$(mktemp)
-    build_postgresql_record "pg_123" "remote" "db.internal" "5433" "postgres" "hunter2" "" "" "" > "$record_file"
+    local default_record_file
+    local verified_record_file
+    default_record_file=$(mktemp)
+    verified_record_file=$(mktemp)
 
-    assert_file_contains "$record_file" '.id' 'pg_123'
-    assert_file_contains "$record_file" '.password' 'hunter2'
-    assert_file_contains "$record_file" '.password_env' 'null'
-    assert_file_contains "$record_file" '.binary_path' 'null'
-    rm -f "$record_file"
+    build_postgresql_record "pg_123" "remote" "db.internal" "5433" "postgres" "hunter2" "" "" "" > "$default_record_file"
+    build_postgresql_record "pg_124" "local" "127.0.0.1" "5432" "postgres" "hunter2" "16.3" "/usr/bin/psql" "postgresql" true > "$verified_record_file"
+
+    assert_file_contains "$default_record_file" '.id' 'pg_123'
+    assert_file_contains "$default_record_file" '.password' 'hunter2'
+    assert_file_contains "$default_record_file" '.password_env' 'null'
+    assert_file_contains "$default_record_file" '.binary_path' 'null'
+    assert_file_contains "$default_record_file" '.available' 'false'
+    assert_file_contains "$verified_record_file" '.available' 'true'
+    rm -f "$default_record_file" "$verified_record_file"
 }
 
 run_collect_postgresql_credentials_output_test() {
@@ -148,10 +154,159 @@ run_collect_postgresql_credentials_output_test() {
     assert_eq "5432|postgres|supersecret" "$captured" "credential collection should only emit machine-readable stdout"
 }
 
+
+run_collect_postgresql_credentials_with_existing_password_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/install_postgresql.sh"
+
+    ask_input() {
+        case "$1" in
+            "PostgreSQL port") echo "5432" ;;
+            "PostgreSQL admin username") echo "postgres" ;;
+            *) echo "" ;;
+        esac
+    }
+    ask_secret() { echo -n ""; }
+    test_postgresql_connection() {
+        assert_eq "existing-secret" "$5" "blank password input should keep the existing secret"
+        return 0
+    }
+
+    local captured
+    captured=$(collect_postgresql_credentials "/usr/bin/psql" "127.0.0.1" "5432" "postgres" "existing-secret" 2>/dev/null)
+    assert_eq "5432|postgres|existing-secret" "$captured" "existing password should be reusable during re-verification"
+}
+
+run_configure_local_postgresql_reuse_existing_record_test() {
+    local temp_dir
+    local fake_bin
+    local config_file
+    temp_dir=$(mktemp -d)
+    fake_bin="${temp_dir}/bin"
+    mkdir -p "$fake_bin"
+    printf '#!/usr/bin/env bash
+echo "psql (PostgreSQL) 16.3"
+' > "${fake_bin}/psql"
+    chmod +x "${fake_bin}/psql"
+    config_file="${temp_dir}/postgresql.json"
+
+    cat > "$config_file" <<JSON
+{
+  "servers": {
+    "pg_existing": {
+      "id": "pg_existing",
+      "location": "local",
+      "host": "localhost",
+      "port": 5432,
+      "username": "postgres",
+      "password": "stored-secret",
+      "password_env": null,
+      "version": "16.3",
+      "binary_path": "${fake_bin}/psql",
+      "service_name": "postgresql",
+      "available": false
+    }
+  }
+}
+JSON
+
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/install_postgresql.sh"
+    PG_CONFIG="$config_file"
+    PATH="${fake_bin}:$PATH"
+
+    systemctl() { return 0; }
+    find() { return 0; }
+    prompt_existing_postgresql_action() { echo "Use the existing configuration"; }
+    ask_input() { echo "unexpected"; }
+    ask_secret() { echo -n "unexpected"; }
+    test_postgresql_connection() {
+        assert_eq "${fake_bin}/psql" "$1" "reuse flow should validate using the discovered binary"
+        assert_eq "localhost" "$2" "reuse flow should keep the stored host"
+        assert_eq "5432" "$3" "reuse flow should keep the stored port"
+        assert_eq "postgres" "$4" "reuse flow should keep the stored username"
+        assert_eq "stored-secret" "$5" "reuse flow should keep the stored password"
+        return 0
+    }
+
+    configure_local_postgresql
+
+    assert_file_contains "$config_file" '.servers["pg_existing"].host' 'localhost'
+    assert_file_contains "$config_file" '.servers["pg_existing"].password' 'stored-secret'
+    assert_file_contains "$config_file" '.servers["pg_existing"].available' 'true'
+    rm -rf "$temp_dir"
+}
+
+run_configure_local_postgresql_failed_reuse_does_not_overwrite_test() {
+    local temp_dir
+    local fake_bin
+    local config_file
+    local before
+    local after
+    local status=0
+    temp_dir=$(mktemp -d)
+    fake_bin="${temp_dir}/bin"
+    mkdir -p "$fake_bin"
+    printf '#!/usr/bin/env bash
+echo "psql (PostgreSQL) 16.3"
+' > "${fake_bin}/psql"
+    chmod +x "${fake_bin}/psql"
+    config_file="${temp_dir}/postgresql.json"
+
+    cat > "$config_file" <<JSON
+{
+  "servers": {
+    "pg_existing": {
+      "id": "pg_existing",
+      "location": "local",
+      "host": "localhost",
+      "port": 5432,
+      "username": "postgres",
+      "password": "stored-secret",
+      "password_env": null,
+      "version": "16.3",
+      "binary_path": "${fake_bin}/psql",
+      "service_name": "postgresql",
+      "available": true
+    }
+  }
+}
+JSON
+    before=$(cat "$config_file")
+
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/install_postgresql.sh"
+    PG_CONFIG="$config_file"
+    PATH="${fake_bin}:$PATH"
+
+    systemctl() { return 0; }
+    find() { return 0; }
+    prompt_existing_postgresql_action() { echo "Use the existing configuration"; }
+    ask_yes_no() { return 1; }
+    test_postgresql_connection() { return 1; }
+
+    set +e
+    ( configure_local_postgresql ) >/dev/null 2>&1
+    status=$?
+    set -e
+
+    if [[ $status -eq 0 ]]; then
+        echo "ASSERTION FAILED: configure_local_postgresql should abort when reuse validation fails and the operator declines to modify" >&2
+        exit 1
+    fi
+
+    after=$(cat "$config_file")
+    assert_eq "$before" "$after" "failed reuse path must not overwrite the existing PostgreSQL record"
+    rm -rf "$temp_dir"
+}
+
 run_inline_password_resolution_test
 run_change_port_flow_test
 run_nuke_port_flow_test
 run_build_postgresql_record_test
 run_collect_postgresql_credentials_output_test
+run_collect_postgresql_credentials_with_existing_password_test
+run_configure_local_postgresql_reuse_existing_record_test
+run_configure_local_postgresql_failed_reuse_does_not_overwrite_test
 
 echo "All shell behaviour tests passed."
