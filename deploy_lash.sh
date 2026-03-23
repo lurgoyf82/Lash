@@ -52,19 +52,19 @@ port_from_config() {
 # ---------------------------------------------------------------------------
 log_section "Step 1: Port Conflict Check"
 
-FASTAPI_PORT=$(port_from_config "${LASH_CONFIG_DIR}/uvicorn.json"    '.port'                 "${LASH_PORTS[fastapi]}")
-STREAMLIT_PORT=$(port_from_config "${LASH_CONFIG_DIR}/streamlit.json" '.port'                "${LASH_PORTS[streamlit]}")
-LITELLM_PORT=$(port_from_config "${LASH_CONFIG_DIR}/litellm.json"     '.port'                "${LASH_PORTS[litellm]}")
-PROM_PORT=$(port_from_config    "${LASH_CONFIG_DIR}/prometheus.json"  '.port'                "${LASH_PORTS[prometheus]}")
-GRAFANA_PORT=$(port_from_config "${LASH_CONFIG_DIR}/grafana.json"     '.port'                "${LASH_PORTS[grafana]}")
+FASTAPI_PORT=$(port_from_config "${LASH_CONFIG_DIR}/uvicorn.json"    '.port' "${LASH_PORTS[fastapi]}")
+STREAMLIT_PORT=$(port_from_config "${LASH_CONFIG_DIR}/streamlit.json" '.port' "${LASH_PORTS[streamlit]}")
+LITELLM_PORT=$(port_from_config "${LASH_CONFIG_DIR}/litellm.json"     '.port' "${LASH_PORTS[litellm]}")
+PROM_PORT=$(port_from_config    "${LASH_CONFIG_DIR}/prometheus.json"  '.port' "${LASH_PORTS[prometheus]}")
+GRAFANA_PORT=$(port_from_config "${LASH_CONFIG_DIR}/grafana.json"     '.port' "${LASH_PORTS[grafana]}")
 
-assert_port_free "$FASTAPI_PORT"    "FastAPI/Uvicorn"
-assert_port_free "$STREAMLIT_PORT"  "Streamlit"
-assert_port_free "$LITELLM_PORT"    "LiteLLM"
-assert_port_free "$PROM_PORT"       "Prometheus"
-assert_port_free "$GRAFANA_PORT"    "Grafana"
+FASTAPI_PORT=$(ensure_port_available "$FASTAPI_PORT"   "FastAPI/Uvicorn" "${LASH_CONFIG_DIR}/uvicorn.json" '.port')
+STREAMLIT_PORT=$(ensure_port_available "$STREAMLIT_PORT" "Streamlit"      "${LASH_CONFIG_DIR}/streamlit.json" '.port')
+LITELLM_PORT=$(ensure_port_available "$LITELLM_PORT"   "LiteLLM"          "${LASH_CONFIG_DIR}/litellm.json" '.port')
+PROM_PORT=$(ensure_port_available "$PROM_PORT"         "Prometheus"       "${LASH_CONFIG_DIR}/prometheus.json" '.port')
+GRAFANA_PORT=$(ensure_port_available "$GRAFANA_PORT"   "Grafana"          "${LASH_CONFIG_DIR}/grafana.json" '.port')
 
-log_info "All required ports are free."
+log_info "Port conflict check complete."
 
 # ---------------------------------------------------------------------------
 # Step 2: Run component installers in dependency order
@@ -100,14 +100,13 @@ PG_ID=$(json_get "$SA_CONFIG" '.selected_postgresql_id')
 PG_HOST=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].host")
 PG_PORT=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].port")
 PG_USER=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].username")
-PG_PASS_ENV=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].password_env")
-
-if [[ -z "${!PG_PASS_ENV:-}" ]]; then
-    log_error "Environment variable ${PG_PASS_ENV} is not set or is empty. Cannot connect to PostgreSQL."
+PG_PASSWORD=$(resolve_secret_value_from_json "$PG_CONFIG" ".servers[\"${PG_ID}\"]") || {
+    PG_PASS_ENV=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].password_env")
+    log_error "No PostgreSQL password available for ${PG_ID}. Populate .password in config/postgresql.json or export ${PG_PASS_ENV}."
     exit 1
-fi
+}
 
-export PGPASSWORD="${!PG_PASS_ENV}"
+export PGPASSWORD="${PG_PASSWORD}"
 
 log_info "Checking if database '${DB_NAME}' exists on ${PG_HOST}:${PG_PORT}..."
 db_check_output=$(psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -lqt postgres 2>&1) || {

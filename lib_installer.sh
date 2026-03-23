@@ -25,7 +25,6 @@ ensure_jq() {
 # ---------------------------------------------------------------------------
 # Filesystem helpers
 # ---------------------------------------------------------------------------
-
 ensure_config_dir() {
     mkdir -p "${LASH_CONFIG_DIR}"
 }
@@ -156,9 +155,9 @@ ask_choice() {
     shift
     local options=("$@")
     local i
-    echo "$prompt"
+    >&2 echo "$prompt"
     for i in "${!options[@]}"; do
-        echo "  $((i+1))) ${options[$i]}"
+        >&2 echo "  $((i+1))) ${options[$i]}"
     done
     local choice
     while true; do
@@ -168,7 +167,7 @@ ask_choice() {
             echo "${options[$((choice-1))]}"
             return 0
         fi
-        echo "Invalid choice. Please enter a number between 1 and ${#options[@]}."
+        >&2 echo "Invalid choice. Please enter a number between 1 and ${#options[@]}."
     done
 }
 
@@ -223,6 +222,11 @@ call_installer() {
 # Port conflict detection
 # ---------------------------------------------------------------------------
 
+validate_port_number() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 ))
+}
+
 # is_port_free <port>
 # Returns 0 if the port is not in use, 1 otherwise.
 is_port_free() {
@@ -233,6 +237,118 @@ is_port_free() {
     return 0
 }
 
+port_usage_report() {
+    local port="$1"
+    ss -tlnp "sport = :${port}" 2>/dev/null || true
+}
+
+port_pids() {
+    local port="$1"
+    port_usage_report "$port" | grep -o 'pid=[0-9]\+' | cut -d= -f2 | sort -u
+}
+
+kill_processes_on_port() {
+    local port="$1"
+    mapfile -t pids < <(port_pids "$port")
+
+    if [[ ${#pids[@]} -eq 0 ]]; then
+        log_error "No process IDs could be resolved for port ${port}."
+        return 1
+    fi
+
+    log_warn "Stopping processes on port ${port}: ${pids[*]}"
+    kill "${pids[@]}" 2>/dev/null || true
+    sleep 1
+
+    if is_port_free "$port"; then
+        log_info "Port ${port} is now free."
+        return 0
+    fi
+
+    log_warn "Processes on port ${port} ignored SIGTERM. Sending SIGKILL..."
+    kill -9 "${pids[@]}" 2>/dev/null || true
+    sleep 1
+
+    if is_port_free "$port"; then
+        log_info "Port ${port} is now free after SIGKILL."
+        return 0
+    fi
+
+    log_error "Port ${port} is still busy after attempting to stop the owning processes."
+    return 1
+}
+
+prompt_for_free_port() {
+    local current_port="$1"
+    local service_name="$2"
+    local candidate
+
+    while true; do
+        candidate=$(ask_input "${service_name} port" "$current_port")
+        if ! validate_port_number "$candidate"; then
+            log_warn "Port '${candidate}' is invalid. Enter a value between 1 and 65535."
+            continue
+        fi
+        if ! is_port_free "$candidate"; then
+            log_warn "Port ${candidate} is still busy. Choose another port or free it first."
+            port_usage_report "$candidate" >&2
+            continue
+        fi
+        echo "$candidate"
+        return 0
+    done
+}
+
+persist_port_value() {
+    local config_file="$1"
+    local jq_path="$2"
+    local port="$3"
+
+    [[ -z "$config_file" || -z "$jq_path" ]] && return 0
+
+    init_json_file "$config_file" '{}'
+    json_set_key "$config_file" "$jq_path" "$port"
+    log_info "Saved ${port} to ${config_file} (${jq_path})."
+}
+
+ensure_port_available() {
+    local port="$1"
+    local service_name="$2"
+    local config_file="${3:-}"
+    local jq_path="${4:-}"
+    local chosen_port="$port"
+    local action
+
+    if is_port_free "$port"; then
+        echo "$port"
+        return 0
+    fi
+
+    echo "[lib] ERROR: Port ${port} required by ${service_name} is already in use." >&2
+    port_usage_report "$port" >&2
+
+    action=$(ask_choice \
+        "Port ${port} for ${service_name} is occupied. What do you want to do?" \
+        "Nuke the process using port ${port}" \
+        "Use a different port")
+
+    case "$action" in
+        "Nuke the process using port ${port}")
+            kill_processes_on_port "$port" || exit 1
+            ;;
+        "Use a different port")
+            chosen_port=$(prompt_for_free_port "$port" "$service_name")
+            persist_port_value "$config_file" "$jq_path" "$chosen_port"
+            ;;
+        *)
+            log_error "Unsupported port-conflict action: ${action}"
+            exit 1
+            ;;
+    esac
+
+    echo "$chosen_port"
+}
+
 # assert_port_free <port> <service_name>
 # Exits with an error message if the port is occupied.
 assert_port_free() {
@@ -240,9 +356,30 @@ assert_port_free() {
     local name="$2"
     if ! is_port_free "$port"; then
         echo "[lib] ERROR: Port ${port} required by ${name} is already in use." >&2
-        ss -tlnp "sport = :${port}" >&2
+        port_usage_report "$port" >&2
         exit 1
     fi
+}
+
+resolve_secret_value_from_json() {
+    local file="$1"
+    local object_path="$2"
+    local inline_secret
+    local secret_env_name
+
+    inline_secret=$(json_get "$file" "${object_path}.password")
+    if [[ "$inline_secret" != "null" && -n "$inline_secret" ]]; then
+        echo "$inline_secret"
+        return 0
+    fi
+
+    secret_env_name=$(json_get "$file" "${object_path}.password_env")
+    if [[ "$secret_env_name" != "null" && -n "$secret_env_name" && -n "${!secret_env_name:-}" ]]; then
+        echo "${!secret_env_name}"
+        return 0
+    fi
+
+    return 1
 }
 
 # ---------------------------------------------------------------------------
