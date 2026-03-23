@@ -192,8 +192,8 @@ ask_secret() {
     local prompt="$1"
     local value
     read -r -s -p "${prompt}: " value
-    echo ""   # newline after hidden input
-    echo "$value"
+    >&2 echo ""   # newline after hidden input (do not pollute stdout)
+    echo -n "$value"
 }
 
 # ---------------------------------------------------------------------------
