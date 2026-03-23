@@ -177,6 +177,83 @@ run_collect_postgresql_credentials_with_existing_password_test() {
     assert_eq "5432|postgres|existing-secret" "$captured" "existing password should be reusable during re-verification"
 }
 
+run_resolve_managed_python_runtime_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/lib_installer.sh"
+
+    local temp_dir
+    local fake_python
+    temp_dir=$(mktemp -d)
+    fake_python="${temp_dir}/python3"
+
+    cat > "$fake_python" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\$1" == "-m" && "\$2" == "venv" ]]; then
+    target="\$3"
+    mkdir -p "\${target}/bin"
+    cat > "\${target}/bin/python" <<'PYEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\$1" == "-m" && "\$2" == "pip" ]]; then
+    exit 0
+fi
+exit 0
+PYEOF
+    chmod +x "\${target}/bin/python"
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "$fake_python"
+
+    local runtime
+    runtime=$(resolve_managed_python_runtime "$fake_python" "${temp_dir}/apps/python_test")
+    assert_eq "${temp_dir}/apps/python_test/bin/python" "$runtime" "managed runtime should point at the venv python"
+    [[ -x "$runtime" ]] || {
+        echo "ASSERTION FAILED: managed runtime should be executable" >&2
+        exit 1
+    }
+
+    rm -rf "$temp_dir"
+}
+
+run_ensure_python_package_installed_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/lib_installer.sh"
+
+    local temp_dir
+    local fake_python
+    temp_dir=$(mktemp -d)
+    fake_python="${temp_dir}/python3"
+
+    cat > "$fake_python" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+marker_dir="$(dirname "$0")"
+marker_file="${marker_dir}/fastapi.installed"
+if [[ "$1" == "-c" ]]; then
+    if [[ -f "$marker_file" ]]; then
+        echo "9.9.9"
+        exit 0
+    fi
+    exit 1
+fi
+if [[ "$1" == "-m" && "$2" == "pip" && "$3" == "install" ]]; then
+    touch "$marker_file"
+    exit 0
+fi
+exit 1
+EOF
+    chmod +x "$fake_python"
+
+    local version
+    version=$(ensure_python_package_installed "$fake_python" "fastapi" "fastapi")
+    assert_eq "9.9.9" "$version" "package install helper should return the detected module version"
+
+    rm -rf "$temp_dir"
+}
+
 run_configure_local_postgresql_reuse_existing_record_test() {
     local temp_dir
     local fake_bin
@@ -306,6 +383,8 @@ run_nuke_port_flow_test
 run_build_postgresql_record_test
 run_collect_postgresql_credentials_output_test
 run_collect_postgresql_credentials_with_existing_password_test
+run_resolve_managed_python_runtime_test
+run_ensure_python_package_installed_test
 run_configure_local_postgresql_reuse_existing_record_test
 run_configure_local_postgresql_failed_reuse_does_not_overwrite_test
 

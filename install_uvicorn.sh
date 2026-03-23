@@ -47,12 +47,14 @@ if [[ -z "$SELECTED_FASTAPI_ID" ]]; then
 fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
+APP_VENV_DIR="${LASH_INSTALLER_DIR}/.venv/apps/${SELECTED_PYTHON_ID}"
+APP_PYTHON_EXE=$(resolve_managed_python_runtime "$SELECTED_PYTHON_EXE" "$APP_VENV_DIR")
 
-json_set_key "$UV_CONFIG" '.selected_python_id'       "\"${SELECTED_PYTHON_ID}\""
-json_set_key "$UV_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
-json_set_key "$UV_CONFIG" '.selected_fastapi_id'      "\"${SELECTED_FASTAPI_ID}\""
-json_set_key "$UV_CONFIG" '.dependency_ready.python'  'true'
-json_set_key "$UV_CONFIG" '.dependency_ready.fastapi' 'true'
+json_set_key "$UV_CONFIG" '.selected_python_id'         "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$UV_CONFIG" '.resolved_python_executable' "\"${APP_PYTHON_EXE}\""
+json_set_key "$UV_CONFIG" '.selected_fastapi_id'        "\"${SELECTED_FASTAPI_ID}\""
+json_set_key "$UV_CONFIG" '.dependency_ready.python'    'true'
+json_set_key "$UV_CONFIG" '.dependency_ready.fastapi'   'true'
 
 # ---------------------------------------------------------------------------
 # 3. Collect runtime settings
@@ -76,10 +78,9 @@ json_set_key "$UV_CONFIG" '.workers' "${UV_WORKERS}"
 # ---------------------------------------------------------------------------
 # 4. Install Uvicorn
 # ---------------------------------------------------------------------------
-log_info "Installing Uvicorn into ${SELECTED_PYTHON_EXE}..."
-"$SELECTED_PYTHON_EXE" -m pip install --quiet "uvicorn[standard]"
+log_info "Installing Uvicorn into ${APP_PYTHON_EXE}..."
+UV_VERSION=$(ensure_python_package_installed "$APP_PYTHON_EXE" "uvicorn[standard]" "uvicorn")
 
-UV_VERSION=$("$SELECTED_PYTHON_EXE" -c "import uvicorn; print(uvicorn.__version__)" 2>/dev/null)
 log_info "Uvicorn ${UV_VERSION} installed."
 
 UV_ID=$(generate_id "uvicorn")
