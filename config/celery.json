@@ -1,0 +1,13 @@
+{
+  "installation_id": null,
+  "selected_python_id": null,
+  "selected_redis_id": null,
+  "concurrency": 4,
+  "queues": ["default"],
+  "dependency_ready": {
+    "python": false,
+    "redis": false
+  },
+  "install_status": "pending",
+  "version": null
+}

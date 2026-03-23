@@ -1,0 +1,10 @@
+{
+  "installation_id": null,
+  "selected_python_id": null,
+  "port": 4000,
+  "dependency_ready": {
+    "python": false
+  },
+  "install_status": "pending",
+  "version": null
+}

@@ -1,0 +1,14 @@
+{
+  "installation_id": null,
+  "selected_python_id": null,
+  "selected_fastapi_id": null,
+  "host": "0.0.0.0",
+  "port": 8000,
+  "workers": 1,
+  "dependency_ready": {
+    "python": false,
+    "fastapi": false
+  },
+  "install_status": "pending",
+  "version": null
+}

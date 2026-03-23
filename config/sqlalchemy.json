@@ -1,0 +1,17 @@
+{
+  "installation_id": null,
+  "selected_python_id": null,
+  "selected_postgresql_id": null,
+  "selected_psycopg_id": null,
+  "database_name": null,
+  "schema": null,
+  "tables": [],
+  "sqlalchemy_options": {},
+  "dependency_ready": {
+    "python": false,
+    "postgresql": false,
+    "psycopg": false
+  },
+  "install_status": "pending",
+  "version": null
+}

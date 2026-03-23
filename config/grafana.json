@@ -1,0 +1,11 @@
+{
+  "installation_id": null,
+  "config_dir": null,
+  "port": 3000,
+  "selected_prometheus_id": null,
+  "dependency_ready": {
+    "prometheus": false
+  },
+  "install_status": "pending",
+  "version": null
+}
