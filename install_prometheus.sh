@@ -18,6 +18,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib_installer.sh"
 
 PROM_CONFIG="${LASH_CONFIG_DIR}/prometheus.json"
 DEFAULT_PORT=9090
+CURRENT_PROM_PORT=""
 
 log_section "Prometheus Installer"
 
@@ -34,6 +35,10 @@ init_json_file "$PROM_CONFIG" '{
   "version": null,
   "install_status": "pending"
 }'
+CURRENT_PROM_PORT=$(json_get "$PROM_CONFIG" '.port')
+if [[ "$CURRENT_PROM_PORT" == "null" || -z "$CURRENT_PROM_PORT" ]]; then
+    CURRENT_PROM_PORT="$DEFAULT_PORT"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Detect existing Prometheus
@@ -77,7 +82,7 @@ EOF
     fi
 
     # Ask for port once here (used in systemd unit and recorded in config)
-    PROM_PORT=$(ask_input "Prometheus port" "${DEFAULT_PORT}")
+    PROM_PORT=$(ask_input "Prometheus port" "${CURRENT_PROM_PORT}")
 
     # Create systemd unit
     sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOF
@@ -108,7 +113,7 @@ fi
 
 # Only prompt for port if it was not already collected during installation above
 if [[ -z "${PROM_PORT:-}" ]]; then
-    PROM_PORT=$(ask_input "Prometheus port" "${DEFAULT_PORT}")
+    PROM_PORT=$(ask_input "Prometheus port" "${CURRENT_PROM_PORT}")
 fi
 PROM_ID=$(generate_id "prometheus")
 

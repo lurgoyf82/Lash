@@ -99,11 +99,13 @@ Le unità systemd caricano opzionalmente:
 - `./.env` (nella directory di installazione)
 - per Celery anche `./.env.celery` (auto-generato dal deploy con `CELERY_BROKER_URL`)
 
-La connessione a PostgreSQL/Redis può richiedere password lette tramite variabili d’ambiente (definite nei JSON come `password_env`). Assicurarsi che tali variabili siano valorizzate (in ambiente o in `.env`).
+PostgreSQL ora salva anche una `password` inline in `config/postgresql.json` dopo aver validato la connessione con un test reale via `psql`. Rimane compatibile con `password_env` per i record legacy o per chi preferisce ancora passare da variabili d’ambiente. Redis continua invece a usare `password_env`.
+
+Durante `deploy_lash.sh`, se una porta è già occupata, il flusso non si ferma più al warning: propone se terminare il processo che sta occupando la porta oppure se scegliere e salvare una porta alternativa nel relativo file `config/*.json`.
 
 ## Troubleshooting
 
-- **Conflitti porte**: aggiornare `config/*.json` o liberare la porta, poi rieseguire `deploy_lash.sh`.
+- **Conflitti porte**: `deploy_lash.sh` può ora chiudere il processo che occupa la porta o salvare una porta alternativa; in alternativa si può ancora modificare manualmente `config/*.json` e rieseguire il deploy.
 - **Un servizio non parte**: controllare `journalctl -u <service>`.
 - **Migrazioni Alembic**: se `alembic.ini` non è presente, le migrazioni vengono saltate.
 

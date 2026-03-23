@@ -53,7 +53,9 @@ SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYT
 # ---------------------------------------------------------------------------
 # 3. Collect LiteLLM settings
 # ---------------------------------------------------------------------------
-LL_PORT=$(ask_input "LiteLLM proxy port" "4000")
+CURRENT_LL_PORT=$(json_get "$LL_CONFIG" '.port')
+[[ "$CURRENT_LL_PORT" == "null" || -z "$CURRENT_LL_PORT" ]] && CURRENT_LL_PORT="4000"
+LL_PORT=$(ask_input "LiteLLM proxy port" "${CURRENT_LL_PORT}")
 
 json_set_key "$LL_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
 json_set_key "$LL_CONFIG" '.port'                    "${LL_PORT}"

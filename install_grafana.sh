@@ -70,7 +70,9 @@ else
     gf_ver=$(grafana-server -v 2>&1 | grep -oP 'Version \K[\d.]+' | head -1 || echo "unknown")
 fi
 
-GF_PORT=$(ask_input "Grafana port" "${DEFAULT_PORT}")
+CURRENT_GF_PORT=$(json_get "$GF_CONFIG" '.port')
+[[ "$CURRENT_GF_PORT" == "null" || -z "$CURRENT_GF_PORT" ]] && CURRENT_GF_PORT="${DEFAULT_PORT}"
+GF_PORT=$(ask_input "Grafana port" "${CURRENT_GF_PORT}")
 GF_ID=$(generate_id "grafana")
 
 json_set_key "$GF_CONFIG" '.installation_id' "\"${GF_ID}\""
