@@ -1,6 +1,7 @@
 {
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "selected_litellm_id": null,
   "dependency_ready": {
     "python": false,

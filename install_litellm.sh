@@ -20,6 +20,7 @@ log_section "LiteLLM Installer"
 init_json_file "$LL_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "port": 4000,
   "dependency_ready": {"python": false},
   "install_status": "pending",
@@ -58,6 +59,7 @@ CURRENT_LL_PORT=$(json_get "$LL_CONFIG" '.port')
 LL_PORT=$(ask_input "LiteLLM proxy port" "${CURRENT_LL_PORT}")
 
 json_set_key "$LL_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$LL_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$LL_CONFIG" '.port'                    "${LL_PORT}"
 json_set_key "$LL_CONFIG" '.dependency_ready.python' 'true'
 

@@ -22,6 +22,7 @@ log_section "AutoGen / AG2 Installer"
 init_json_file "$AG_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "selected_litellm_id": null,
   "dependency_ready": {"python": false, "litellm": false},
   "install_status": "pending",
@@ -52,6 +53,7 @@ fi
 
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
 json_set_key "$AG_CONFIG" '.selected_python_id'      "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$AG_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$AG_CONFIG" '.dependency_ready.python' 'true'
 
 # ---------------------------------------------------------------------------
@@ -60,6 +62,7 @@ json_set_key "$AG_CONFIG" '.dependency_ready.python' 'true'
 init_json_file "$LL_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "port": 4000,
   "dependency_ready": {"python": false},
   "install_status": "pending",

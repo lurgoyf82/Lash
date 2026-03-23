@@ -1,6 +1,7 @@
 {
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "selected_fastapi_id": null,
   "host": "0.0.0.0",
   "port": 8000,

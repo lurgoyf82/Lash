@@ -22,6 +22,7 @@ log_section "Uvicorn Installer"
 init_json_file "$UV_CONFIG" '{
   "installation_id": null,
   "selected_python_id": null,
+  "resolved_python_executable": null,
   "selected_fastapi_id": null,
   "host": "0.0.0.0",
   "port": 8000,
@@ -48,6 +49,7 @@ fi
 SELECTED_PYTHON_EXE=$(json_get "$PYTHON_CONFIG" ".installations[\"${SELECTED_PYTHON_ID}\"].executable")
 
 json_set_key "$UV_CONFIG" '.selected_python_id'       "\"${SELECTED_PYTHON_ID}\""
+json_set_key "$UV_CONFIG" '.resolved_python_executable' "\"${SELECTED_PYTHON_EXE}\""
 json_set_key "$UV_CONFIG" '.selected_fastapi_id'      "\"${SELECTED_FASTAPI_ID}\""
 json_set_key "$UV_CONFIG" '.dependency_ready.python'  'true'
 json_set_key "$UV_CONFIG" '.dependency_ready.fastapi' 'true'
