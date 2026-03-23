@@ -273,6 +273,7 @@ assert 'render_dashboard()' in app_text, 'Streamlit bootstrap missing'
 assert 'def create_celery_app()' in tasks_text, 'Celery factory missing'
 assert '@celery_app.task(name="lash.ping")' in tasks_text, 'Celery smoke task missing'
 assert '-A tasks:celery_app worker' in deploy_text, 'Celery systemd entrypoint should target celery_app'
+assert '/health/liveliness' in deploy_text, 'LiteLLM health check should target the liveliness endpoint'
 PYEOF
 }
 
