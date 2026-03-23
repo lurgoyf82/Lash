@@ -77,6 +77,8 @@ sudo journalctl -u lash-celery -f
 
 sudo systemctl status lash-litellm
 sudo journalctl -u lash-litellm -f
+
+curl -fsS http://localhost:4000/health/liveliness
 ```
 
 ## Configurazione

@@ -287,7 +287,7 @@ wait_for_http() {
 
 wait_for_http "http://localhost:${UV_PORT}/health"      "FastAPI"
 wait_for_http "http://localhost:${STREAMLIT_PORT}/"     "Streamlit"
-wait_for_http "http://localhost:${LITELLM_PORT}/health" "LiteLLM"
+wait_for_http "http://localhost:${LITELLM_PORT}/health/liveliness" "LiteLLM"
 wait_for_http "http://localhost:${PROM_PORT}/-/healthy" "Prometheus"
 wait_for_http "http://localhost:${GRAFANA_PORT}/api/health" "Grafana"
 
