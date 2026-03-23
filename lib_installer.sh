@@ -10,7 +10,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 LASH_INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LASH_CONFIG_DIR="${LASH_INSTALLER_DIR}/config"
-LASH_DEBUG="${LASH_DEBUG:-1}"
+LASH_DEBUG="${LASH_DEBUG:-0}"
 
 is_truthy() {
     local value="${1:-}"
