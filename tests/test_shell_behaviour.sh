@@ -126,9 +126,32 @@ run_build_postgresql_record_test() {
     rm -f "$record_file"
 }
 
+run_collect_postgresql_credentials_output_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/install_postgresql.sh"
+
+    ask_input() {
+        case "$1" in
+            "PostgreSQL port") echo "5432" ;;
+            "PostgreSQL admin username") echo "postgres" ;;
+            *) echo "" ;;
+        esac
+    }
+    ask_secret() { echo -n "supersecret"; }
+    test_postgresql_connection() {
+        log_info "connection ok"
+        return 0
+    }
+
+    local captured
+    captured=$(collect_postgresql_credentials "/usr/bin/psql" "127.0.0.1" "5432" "postgres" 2>/dev/null)
+    assert_eq "5432|postgres|supersecret" "$captured" "credential collection should only emit machine-readable stdout"
+}
+
 run_inline_password_resolution_test
 run_change_port_flow_test
 run_nuke_port_flow_test
 run_build_postgresql_record_test
+run_collect_postgresql_credentials_output_test
 
 echo "All shell behaviour tests passed."
