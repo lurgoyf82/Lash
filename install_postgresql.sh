@@ -9,7 +9,7 @@
 #   servers.<pg_id>.host
 #   servers.<pg_id>.port
 #   servers.<pg_id>.username
-#   servers.<pg_id>.password_env    (env-var name that holds the password)
+#   servers.<pg_id>.password        (plaintext password)
 #   servers.<pg_id>.version
 #   servers.<pg_id>.binary_path     (null for remote)
 #   servers.<pg_id>.service_name    (systemd unit, null for remote)
@@ -82,9 +82,15 @@ if [[ "$LOCATION" == "local" ]]; then
 
         # Collect credentials
         pg_user=$(ask_input "PostgreSQL admin username" "postgres")
-        pg_pass_env="PG_PASSWORD_${pgid^^}"
-        log_info "Paste the password into environment variable: ${pg_pass_env}"
-        log_info "(You can set it in a secrets file — never hardcode it)"
+        pg_pass=$(ask_secret "PostgreSQL password for ${pg_user}@${host}:${port}")
+
+        # Test connectivity before recording
+        log_info "Testing PostgreSQL connection to ${host}:${port} as ${pg_user}..."
+        if ! PGPASSWORD="$pg_pass" psql -h "$host" -p "$port" -U "$pg_user" -d postgres -c 'SELECT 1;' >/dev/null 2>&1; then
+            log_error "Connection test failed. Check host/port/user/password and pg_hba.conf."
+            exit 1
+        fi
+        log_info "Connection OK."
 
         record=$(jq -n \
             --arg id        "$pgid" \
@@ -92,12 +98,12 @@ if [[ "$LOCATION" == "local" ]]; then
             --arg host      "$host" \
             --argjson port  "$port" \
             --arg user      "$pg_user" \
-            --arg penv      "$pg_pass_env" \
+            --arg pass      "$pg_pass" \
             --arg ver       "$ver" \
             --arg bin       "$psql_exe" \
             --arg svc       "$svc" \
             '{id:$id, location:$loc, host:$host, port:$port,
-              username:$user, password_env:$penv,
+              username:$user, password:$pass,
               version:$ver, binary_path:$bin,
               service_name:$svc, available:true}')
         json_upsert_record "$PG_CONFIG" ".servers" "$pgid" "$record"
@@ -112,8 +118,14 @@ else
     port=$(ask_input "PostgreSQL port" "5432")
     pg_user=$(ask_input "PostgreSQL username" "postgres")
     pgid=$(generate_id "pg")
-    pg_pass_env="PG_PASSWORD_${pgid^^}"
-    log_info "Set environment variable ${pg_pass_env} to the PostgreSQL password before starting LASH."
+    pg_pass=$(ask_secret "PostgreSQL password for ${pg_user}@${host}:${port}")
+
+    log_info "Testing PostgreSQL connection to ${host}:${port} as ${pg_user}..."
+    if ! PGPASSWORD="$pg_pass" psql -h "$host" -p "$port" -U "$pg_user" -d postgres -c 'SELECT 1;' >/dev/null 2>&1; then
+        log_error "Connection test failed. Check host/port/user/password and pg_hba.conf."
+        exit 1
+    fi
+    log_info "Connection OK."
 
     record=$(jq -n \
         --arg id        "$pgid" \
@@ -121,9 +133,9 @@ else
         --arg host      "$host" \
         --argjson port  "$port" \
         --arg user      "$pg_user" \
-        --arg penv      "$pg_pass_env" \
+        --arg pass      "$pg_pass" \
         '{id:$id, location:$loc, host:$host, port:($port|tonumber),
-          username:$user, password_env:$penv,
+          username:$user, password:$pass,
           version:null, binary_path:null,
           service_name:null, available:true}')
     json_upsert_record "$PG_CONFIG" ".servers" "$pgid" "$record"

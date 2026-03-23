@@ -245,6 +245,73 @@ assert_port_free() {
     fi
 }
 
+# interactive_resolve_port_conflict <config_file> <jq_path> <port> <service_name>
+# If port is occupied, ask whether to kill the process(es) or change port.
+# On change, writes the new port to config_file at jq_path.
+interactive_resolve_port_conflict() {
+    local config_file="$1"
+    local jq_path="$2"
+    local port="$3"
+    local name="$4"
+
+    if is_port_free "$port"; then
+        return 0
+    fi
+
+    log_warn "Port ${port} required by ${name} is already in use."
+    ss -tlnp "sport = :${port}" >&2 || true
+
+    local action
+    action=$(ask_choice "How do you want to resolve the conflict for ${name} on port ${port}?" \
+        "Kill the process using port ${port}" \
+        "Use a different port" \
+        "Abort")
+
+    case "$action" in
+        "Kill the process using port ${port}")
+            if ! command -v fuser >/dev/null 2>&1; then
+                log_error "fuser not found (package: psmisc). Cannot auto-kill."
+                exit 1
+            fi
+            log_warn "Attempting to terminate process(es) listening on TCP ${port}..."
+            # Try graceful then force
+            sudo fuser -k -TERM "${port}/tcp" >/dev/null 2>&1 || true
+            sleep 1
+            if ! is_port_free "$port"; then
+                sudo fuser -k -KILL "${port}/tcp" >/dev/null 2>&1 || true
+                sleep 1
+            fi
+            if ! is_port_free "$port"; then
+                log_error "Port ${port} is still in use. Aborting."
+                exit 1
+            fi
+            log_info "Port ${port} is now free."
+            ;;
+        "Use a different port")
+            init_json_file "$config_file" '{}'
+            local new_port
+            while true; do
+                new_port=$(ask_input "Enter a new port for ${name}" "$port")
+                if [[ ! "$new_port" =~ ^[0-9]+$ ]] || (( new_port < 1 || new_port > 65535 )); then
+                    log_warn "Invalid port: ${new_port}"
+                    continue
+                fi
+                if is_port_free "$new_port"; then
+                    break
+                fi
+                log_warn "Port ${new_port} is also in use. Choose another."
+                ss -tlnp "sport = :${new_port}" >&2 || true
+            done
+            json_set_key "$config_file" "$jq_path" "${new_port}"
+            log_info "Saved ${name} port override to ${config_file}: ${new_port}"
+            ;;
+        "Abort")
+            log_error "Aborted by user."
+            exit 1
+            ;;
+    esac
+}
+
 # ---------------------------------------------------------------------------
 # Service status helpers
 # ---------------------------------------------------------------------------

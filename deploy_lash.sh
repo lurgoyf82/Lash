@@ -58,11 +58,11 @@ LITELLM_PORT=$(port_from_config "${LASH_CONFIG_DIR}/litellm.json"     '.port'   
 PROM_PORT=$(port_from_config    "${LASH_CONFIG_DIR}/prometheus.json"  '.port'                "${LASH_PORTS[prometheus]}")
 GRAFANA_PORT=$(port_from_config "${LASH_CONFIG_DIR}/grafana.json"     '.port'                "${LASH_PORTS[grafana]}")
 
-assert_port_free "$FASTAPI_PORT"    "FastAPI/Uvicorn"
-assert_port_free "$STREAMLIT_PORT"  "Streamlit"
-assert_port_free "$LITELLM_PORT"    "LiteLLM"
-assert_port_free "$PROM_PORT"       "Prometheus"
-assert_port_free "$GRAFANA_PORT"    "Grafana"
+interactive_resolve_port_conflict "${LASH_CONFIG_DIR}/uvicorn.json"    '.port' "$FASTAPI_PORT"   "FastAPI/Uvicorn"
+interactive_resolve_port_conflict "${LASH_CONFIG_DIR}/streamlit.json"  '.port' "$STREAMLIT_PORT" "Streamlit"
+interactive_resolve_port_conflict "${LASH_CONFIG_DIR}/litellm.json"    '.port' "$LITELLM_PORT"   "LiteLLM"
+interactive_resolve_port_conflict "${LASH_CONFIG_DIR}/prometheus.json" '.port' "$PROM_PORT"      "Prometheus"
+interactive_resolve_port_conflict "${LASH_CONFIG_DIR}/grafana.json"    '.port' "$GRAFANA_PORT"   "Grafana"
 
 log_info "All required ports are free."
 
@@ -100,14 +100,14 @@ PG_ID=$(json_get "$SA_CONFIG" '.selected_postgresql_id')
 PG_HOST=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].host")
 PG_PORT=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].port")
 PG_USER=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].username")
-PG_PASS_ENV=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].password_env")
+PG_PASS=$(json_get "$PG_CONFIG" ".servers[\"${PG_ID}\"].password")
 
-if [[ -z "${!PG_PASS_ENV:-}" ]]; then
-    log_error "Environment variable ${PG_PASS_ENV} is not set or is empty. Cannot connect to PostgreSQL."
+if [[ -z "${PG_PASS:-}" || "$PG_PASS" == "null" ]]; then
+    log_error "PostgreSQL password is missing in ${PG_CONFIG} for server ${PG_ID}."
     exit 1
 fi
 
-export PGPASSWORD="${!PG_PASS_ENV}"
+export PGPASSWORD="${PG_PASS}"
 
 log_info "Checking if database '${DB_NAME}' exists on ${PG_HOST}:${PG_PORT}..."
 db_check_output=$(psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -lqt postgres 2>&1) || {
