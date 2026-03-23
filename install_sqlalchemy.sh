@@ -131,7 +131,11 @@ log_info "Collecting SQLAlchemy-specific database settings..."
 DB_NAME=$(ask_input "Database name for SQLAlchemy to use" "lash_db")
 DB_SCHEMA=$(ask_input "Schema" "public")
 TABLES_RAW=$(ask_input "Comma-separated table names (leave blank to skip)" "")
-SA_ECHO=$(ask_yes_no "Enable SQLAlchemy echo (SQL logging)?") && SA_ECHO_VAL="true" || SA_ECHO_VAL="false"
+if ask_yes_no "Enable SQLAlchemy echo (SQL logging)?"; then
+    SA_ECHO_VAL="true"
+else
+    SA_ECHO_VAL="false"
+fi
 POOL_SIZE=$(ask_input "Connection pool size" "5")
 MAX_OVERFLOW=$(ask_input "Max overflow" "10")
 

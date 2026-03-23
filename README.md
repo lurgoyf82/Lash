@@ -197,7 +197,7 @@ Problema di coerenza tra installer:
 In `install_sqlalchemy.sh` c’è una riga del tipo:
 
 ```
-SA_ECHO=$(ask_yes_no "Enable SQLAlchemy echo (SQL logging)?") && SA_ECHO_VAL="true" || SA_ECHO_VAL="false"
+if ask_yes_no "Enable SQLAlchemy echo (SQL logging)?"; then SA_ECHO_VAL="true"; else SA_ECHO_VAL="false"; fi
 ```
 
 `ask_yes_no`:
