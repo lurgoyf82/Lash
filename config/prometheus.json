@@ -1,0 +1,9 @@
+{
+  "installation_id": null,
+  "binary_path": null,
+  "config_path": null,
+  "port": 9090,
+  "data_dir": null,
+  "install_status": "pending",
+  "version": null
+}

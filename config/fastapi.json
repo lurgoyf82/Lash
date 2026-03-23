@@ -1,0 +1,9 @@
+{
+  "installation_id": null,
+  "selected_python_id": null,
+  "dependency_ready": {
+    "python": false
+  },
+  "install_status": "pending",
+  "version": null
+}
