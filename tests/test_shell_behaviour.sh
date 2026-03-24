@@ -255,6 +255,29 @@ EOF
 }
 
 
+run_resolve_python_console_script_test() {
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/lib_installer.sh"
+
+    local temp_dir
+    local fake_python
+    local fake_litellm
+    temp_dir=$(mktemp -d)
+    fake_python="${temp_dir}/python"
+    fake_litellm="${temp_dir}/litellm"
+
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$fake_python"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$fake_litellm"
+    chmod +x "$fake_python" "$fake_litellm"
+
+    local resolved
+    resolved=$(resolve_python_console_script "$fake_python" "litellm")
+    assert_eq "$fake_litellm" "$resolved" "console script helper should resolve executables next to the runtime python"
+
+    rm -rf "$temp_dir"
+}
+
+
 run_runtime_entrypoint_files_test() {
 
     python - <<'PYEOF' "${REPO_ROOT}"
@@ -273,6 +296,9 @@ assert 'render_dashboard()' in app_text, 'Streamlit bootstrap missing'
 assert 'def create_celery_app()' in tasks_text, 'Celery factory missing'
 assert '@celery_app.task(name="lash.ping")' in tasks_text, 'Celery smoke task missing'
 assert '-A tasks:celery_app worker' in deploy_text, 'Celery systemd entrypoint should target celery_app'
+assert 'resolve_python_console_script "$LITELLM_PYTHON_EXE" "litellm"' in deploy_text, 'LiteLLM unit should resolve the console script from the selected runtime'
+assert 'ExecStart=${LITELLM_EXE} --port ${LITELLM_PORT}' in deploy_text, 'LiteLLM systemd entrypoint should use the console script'
+assert '-m litellm --port' not in deploy_text, 'LiteLLM should not be launched via python -m litellm'
 assert '/health/liveliness' in deploy_text, 'LiteLLM health check should target the liveliness endpoint'
 PYEOF
 }
@@ -408,6 +434,7 @@ run_collect_postgresql_credentials_output_test
 run_collect_postgresql_credentials_with_existing_password_test
 run_resolve_managed_python_runtime_test
 run_ensure_python_package_installed_test
+run_resolve_python_console_script_test
 run_runtime_entrypoint_files_test
 run_configure_local_postgresql_reuse_existing_record_test
 run_configure_local_postgresql_failed_reuse_does_not_overwrite_test
