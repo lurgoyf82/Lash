@@ -208,6 +208,25 @@ resolve_component_python_executable() {
     echo "$resolved_python"
 }
 
+# resolve_python_console_script <python_executable> <script_name>
+# Resolves a console-script installed alongside the given Python executable.
+resolve_python_console_script() {
+    local python_exe="$1"
+    local script_name="$2"
+    local script_dir
+    local script_path
+
+    script_dir=$(dirname "$python_exe")
+    script_path="${script_dir}/${script_name}"
+
+    if [[ ! -x "$script_path" ]]; then
+        log_error "Could not find executable console script '${script_name}' next to ${python_exe}."
+        return 1
+    fi
+
+    echo "$script_path"
+}
+
 # ---------------------------------------------------------------------------
 # ID generation
 # ---------------------------------------------------------------------------

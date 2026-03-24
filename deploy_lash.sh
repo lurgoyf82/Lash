@@ -144,6 +144,7 @@ UVICORN_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/uvi
 STREAMLIT_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/streamlit.json")
 CELERY_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/celery.json")
 LITELLM_PYTHON_EXE=$(resolve_component_python_executable "${LASH_CONFIG_DIR}/litellm.json")
+LITELLM_EXE=$(resolve_python_console_script "$LITELLM_PYTHON_EXE" "litellm")
 INSTALL_DIR="${LASH_INSTALLER_DIR}"
 
 # Resolve broker URL for Celery
@@ -241,7 +242,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${LITELLM_PYTHON_EXE} -m litellm --port ${LITELLM_PORT}
+ExecStart=${LITELLM_EXE} --port ${LITELLM_PORT}
 Restart=on-failure
 EnvironmentFile=-${INSTALL_DIR}/.env
 
